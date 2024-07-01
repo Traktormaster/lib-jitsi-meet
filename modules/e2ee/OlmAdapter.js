@@ -72,6 +72,7 @@ export class OlmAdapter extends Listenable {
         super();
 
         this._conf = conference;
+        this._eac = conference.options.config.externalAccessControl;
         this._init = new Deferred();
         this._mediaKey = undefined;
         this._mediaKeyIndex = -1;
@@ -116,7 +117,7 @@ export class OlmAdapter extends Listenable {
 
             for (const participant of this._conf.getParticipants()) {
                 if (participant.hasFeature(FEATURE_E2EE) && localParticipantId < participant.getId()) {
-                    promises.push(this._sendSessionInit(participant));
+                    promises.push(await this._sendSessionInit(participant));
                 }
             }
 
@@ -469,7 +470,8 @@ export class OlmAdapter extends Listenable {
                 logger.warn(`Participant ${pId} already has a session`);
 
                 this._sendError(participant, 'Session already established');
-            } else {
+            } else if (!this._eac ||
+                await this._eac.verify(msg.data.eac, msg.data.idKey, msg.data.otKey, msg.data.uuid)) {
                 // Create a session for communicating with this participant.
 
                 const session = new Olm.Session();
@@ -478,19 +480,26 @@ export class OlmAdapter extends Listenable {
                 olmData.session = session;
 
                 // Send ACK
+                const ciphertext = this._encryptKeyInfo(session);
+                const eac = this._eac ? await this._eac.sign(ciphertext, msg.data.uuid) : undefined;
                 const ack = {
                     [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
                     olm: {
                         type: OLM_MESSAGE_TYPES.SESSION_ACK,
                         data: {
-                            ciphertext: this._encryptKeyInfo(session),
-                            uuid: msg.data.uuid
+                            ciphertext,
+                            uuid: msg.data.uuid,
+                            eac
                         }
                     }
                 };
 
                 this._sendMessage(ack, pId);
                 this._onParticipantE2EEChannelReady(pId);
+            } else {
+                logger.warn(`Participant ${pId} join rejected by external access control`);
+
+                this._sendError(participant, 'Rejected by external access control');
             }
             break;
         }
@@ -499,7 +508,12 @@ export class OlmAdapter extends Listenable {
                 logger.warn(`Participant ${pId} already has a session`);
 
                 this._sendError(participant, 'No session found');
-            } else if (msg.data.uuid === olmData.pendingSessionUuid) {
+            } else if (msg.data.uuid !== olmData.pendingSessionUuid) {
+                logger.warn('Received ACK with the wrong UUID');
+
+                this._sendError(participant, 'Invalid UUID');
+            } else if (!this._eac ||
+                await this._eac.verify(msg.data.eac, msg.data.ciphertext, msg.data.uuid)) {
                 const { ciphertext } = msg.data;
                 const d = this._reqs.get(msg.data.uuid);
                 const session = new Olm.Session();
@@ -530,9 +544,9 @@ export class OlmAdapter extends Listenable {
                     this.eventEmitter.emit(OlmAdapterEvents.PARTICIPANT_KEY_UPDATED, pId, key, keyIndex);
                 }
             } else {
-                logger.warn('Received ACK with the wrong UUID');
+                logger.warn(`Participant ${pId} ack rejected by external access control`);
 
-                this._sendError(participant, 'Invalid UUID');
+                this._sendError(participant, 'Rejected by external access control');
             }
             break;
         }
@@ -901,7 +915,7 @@ export class OlmAdapter extends Listenable {
                     if (this._sessionInitialization) {
                         await this._sessionInitialization;
                     }
-                    await this._sendSessionInit(participant);
+                    await (await this._sendSessionInit(participant));
 
                     const uuid = uuidv4();
 
@@ -977,7 +991,7 @@ export class OlmAdapter extends Listenable {
      * @returns {Promise} - The promise will be resolved when the session-ack is received.
      * @private
      */
-    _sendSessionInit(participant) {
+    async _sendSessionInit(participant) {
         const pId = participant.getId();
         const olmData = this._getParticipantOlmData(participant);
 
@@ -1007,6 +1021,9 @@ export class OlmAdapter extends Listenable {
         this._olmAccount.mark_keys_as_published();
 
         const uuid = uuidv4();
+        const eac = this._eac
+            ? await this._eac.sign(this._idKeys.curve25519, otKey, uuid)
+            : undefined;
         const init = {
             [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
             olm: {
@@ -1014,7 +1031,8 @@ export class OlmAdapter extends Listenable {
                 data: {
                     idKey: this._idKeys.curve25519,
                     otKey,
-                    uuid
+                    uuid,
+                    eac
                 }
             }
         };
