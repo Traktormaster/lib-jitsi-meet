@@ -18,7 +18,8 @@ export class E2EEncryption {
         this._externallyManaged = e2ee.externallyManagedKey;
 
         if (this._externallyManaged) {
-            this._keyHandler = new ExternallyManagedKeyHandler(conference);
+            throw new Error('Externally managed E2EE key use is disabled');
+            // this._keyHandler = new ExternallyManagedKeyHandler(conference);
         } else {
             this._keyHandler = new ManagedKeyHandler(conference);
         }

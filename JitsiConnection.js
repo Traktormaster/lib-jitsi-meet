@@ -122,10 +122,19 @@ JitsiConnection.prototype.setToken = function(token) {
  * @returns {JitsiConference} returns the new conference object.
  */
 JitsiConnection.prototype.initJitsiConference = function(name, options) {
-    return new JitsiConference({
+    const conf = new JitsiConference({
         name,
         config: options,
         connection: this
+    });
+    return new Promise((resolve, reject) => {
+        conf.toggleE2EE(true).then(() => {
+            if (conf.isE2EEEnabled()) {
+                resolve(conf);
+            } else {
+                reject(new Error('Failed to enable E2EE'));
+            }
+        }).catch(e => reject(e));
     });
 };
 

@@ -63,6 +63,9 @@ export class KeyHandler extends Listenable {
      * @returns {void}
      */
     async setEnabled(enabled) {
+        if (!enabled) {
+            throw new Error('Disabling E2EE is forbidden');
+        }
         this._enabling && await this._enabling;
 
         if (enabled === this.enabled) {

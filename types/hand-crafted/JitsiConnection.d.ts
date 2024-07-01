@@ -12,7 +12,7 @@ export default class JitsiConnection {
   disconnect: ( ...args: unknown[] ) => Promise<unknown>; // TODO:
   getJid: () => string;
   setToken: ( token: unknown ) => void;
-  initJitsiConference: ( name: string, options: JitsiConferenceOptions ) => JitsiConference;
+  initJitsiConference: ( name: string, options: JitsiConferenceOptions ) => Promise<JitsiConference>;
   addEventListener: ( event: JitsiConnectionEvents, listener: unknown ) => void; // TODO:
   removeEventListener: ( event: JitsiConnectionEvents, listener: unknown ) => void; // TODO:
   getConnectionTimes: () => number; // TODO: check
