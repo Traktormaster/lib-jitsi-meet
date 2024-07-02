@@ -2,6 +2,7 @@
 
 import { safeJsonParse as _safeJsonParse } from '@jitsi/js-utils/json';
 import { getLogger } from '@jitsi/logger';
+const stringify = require('json-stringify-deterministic');
 import base64js from 'base64-js';
 import isEqual from 'lodash.isequal';
 import { v4 as uuidv4 } from 'uuid';
@@ -470,8 +471,15 @@ export class OlmAdapter extends Listenable {
                 logger.warn(`Participant ${pId} already has a session`);
 
                 this._sendError(participant, 'Session already established');
-            } else if (!this._eac ||
-                await this._eac.verify(msg.data.eac, msg.data.idKey, msg.data.otKey, msg.data.uuid)) {
+            } else if (await this._external_access_control_verify(
+                participant,
+                msg.data.eac,
+                {
+                    type: 'init',
+                    idKey: msg.data.idKey,
+                    otKey: msg.data.otKey,
+                    uuid: msg.data.uuid
+                })) {
                 // Create a session for communicating with this participant.
 
                 const session = new Olm.Session();
@@ -481,7 +489,13 @@ export class OlmAdapter extends Listenable {
 
                 // Send ACK
                 const ciphertext = this._encryptKeyInfo(session);
-                const eac = this._eac ? await this._eac.sign(ciphertext, msg.data.uuid) : undefined;
+                const eac = this._eac
+                    ? await this._eac.sign(stringify({
+                        type: 'ack',
+                        ciphertext,
+                        uuid: msg.data.uuid
+                    }))
+                    : undefined;
                 const ack = {
                     [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
                     olm: {
@@ -512,8 +526,14 @@ export class OlmAdapter extends Listenable {
                 logger.warn('Received ACK with the wrong UUID');
 
                 this._sendError(participant, 'Invalid UUID');
-            } else if (!this._eac ||
-                await this._eac.verify(msg.data.eac, msg.data.ciphertext, msg.data.uuid)) {
+            } else if (await this._external_access_control_verify(
+                participant,
+                msg.data.eac,
+                {
+                    type: 'ack',
+                    ciphertext: msg.data.ciphertext,
+                    uuid: msg.data.uuid
+                })) {
                 const { ciphertext } = msg.data;
                 const d = this._reqs.get(msg.data.uuid);
                 const session = new Olm.Session();
@@ -1022,7 +1042,12 @@ export class OlmAdapter extends Listenable {
 
         const uuid = uuidv4();
         const eac = this._eac
-            ? await this._eac.sign(this._idKeys.curve25519, otKey, uuid)
+            ? await this._eac.sign(stringify({
+                type: 'init',
+                idKey: this._idKeys.curve25519,
+                otKey,
+                uuid
+            }))
             : undefined;
         const init = {
             [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
@@ -1106,6 +1131,31 @@ export class OlmAdapter extends Listenable {
         olmUtil.free();
 
         return commitment;
+    }
+
+    /**
+     * Queries the configured external access control (if any), if the session-message shall be accepted.
+     */
+    async _external_access_control_verify(participant, eacData, data) {
+        if (!this._eac) {
+            return true; // pass verify without eac configured
+        }
+        try {
+            const { granted = false, properties = {} } = await this._eac.verify(
+                eacData, stringify(data), participant.getId()
+            );
+            if (granted) {
+                for (const [key, value] of Object.entries(properties)) {
+                    if (typeof key === 'string') {
+                        participant.setProperty(`eac.${key}`, value);
+                    }
+                }
+                return true;
+            }
+        } catch (e) {
+            logger.warn('Exception raised during eac.verify', e);
+        }
+        return false;
     }
 }
 
