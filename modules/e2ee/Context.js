@@ -170,7 +170,7 @@ export class Context {
          * This will send unencrypted data (only protected by DTLS transport encryption) when no key is configured.
          * This is ok for demo purposes but should not be done once this becomes more relied upon.
          */
-        controller.enqueue(encodedFrame);
+        // controller.enqueue(encodedFrame);
     }
 
     /**
