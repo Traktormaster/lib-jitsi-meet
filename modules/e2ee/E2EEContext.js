@@ -39,18 +39,6 @@ export default class E2EEcontext {
 
         let workerUrl = `${baseUrl}lib-jitsi-meet.e2ee-worker.js`;
 
-        // If there is no baseUrl then we create the worker in a normal way
-        // as you cant load scripts inside blobs from relative paths.
-        // See: https://www.html5rocks.com/en/tutorials/workers/basics/#toc-inlineworkers-loadingscripts
-        if (baseUrl && baseUrl !== '/') {
-            // Initialize the E2EE worker. In order to avoid CORS issues, start the worker and have it
-            // synchronously load the JS.
-            const workerBlob
-                = new Blob([ `importScripts("${workerUrl}");` ], { type: 'application/javascript' });
-
-            workerUrl = window.URL.createObjectURL(workerBlob);
-        }
-
         this._worker = new Worker(workerUrl, { name: 'E2EE Worker' });
 
         this._worker.onerror = e => logger.error(e);
