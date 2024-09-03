@@ -300,6 +300,8 @@ export default function JitsiConference(options) {
         logger.info('End-to-End Encryption is supported');
 
         this._e2eEncryption = new E2EEncryption(this);
+    } else {
+        throw new Error('E2EE is not supported by the browser');
     }
 
     if (FeatureFlags.isRunInLiteModeEnabled()) {
@@ -3868,14 +3870,14 @@ JitsiConference.prototype.isE2EESupported = function() {
  * @param {boolean} enabled whether to enable E2EE or not.
  * @returns {void}
  */
-JitsiConference.prototype.toggleE2EE = function(enabled) {
+JitsiConference.prototype.toggleE2EE = async function(enabled) {
     if (!this.isE2EESupported()) {
         logger.warn('Cannot enable / disable E2EE: platform is not supported.');
 
         return;
     }
 
-    this._e2eEncryption.setEnabled(enabled);
+    await this._e2eEncryption.setEnabled(enabled);
 };
 
 /**

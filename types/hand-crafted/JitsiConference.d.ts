@@ -133,7 +133,7 @@ export default class JitsiConference {
   setSenderVideoConstraint: ( maxFrameHeight: number ) => Promise<unknown>; // TODO:
   isE2EEEnabled: () => boolean;
   createVideoSIPGWSession: ( sipAddress: string, displayName: string ) => JitsiVideoSIPGWSession | Error;
-  toggleE2EE: ( enabled: boolean ) => void;
+  toggleE2EE: ( enabled: boolean ) => Promise<unknown>;
   isLobbySupported: () => boolean;
   isMembersOnly: () => boolean;
   enableLobby: () => Promise<unknown>;
